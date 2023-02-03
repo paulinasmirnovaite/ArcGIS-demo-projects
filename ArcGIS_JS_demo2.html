@@ -1,0 +1,618 @@
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>
+      ArcGIS Maps SDK for JavaScript 4.25
+    </title>
+    <style>
+      html,
+      body,
+      #viewDiv {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      #selection {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        display: flex;
+        justify-content: center;
+      }
+      
+      
+      .esri-ui-top-right {
+        max-height: 100%;
+      }
+
+      #queryDiv,
+      #resultDiv {
+        min-width: 250px;
+        font-size: 14px;
+        padding: 10px;
+        display: none;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      .geometry-options {
+        display: flex;
+        flex-direction: row;
+      }
+      .geometry-button {
+        flex: 1;
+        border-style: solid;
+        border-width: 1px;
+        border-image: none;
+      }
+      .geometry-button-selected {
+        background: #4c4c4c;
+        color: #fff;
+      }
+
+      #bufferNum {
+        width: 90%;
+        margin: 2.5em auto 0;
+      }
+
+      .count {
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: bold;
+        display: inline-block;
+      }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.25/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.25/"></script>
+
+    <script>
+      require([
+        "esri/Map",
+        "esri/layers/SceneLayer",
+        "esri/views/SceneView",
+        "esri/widgets/Expand",
+        "esri/widgets/Weather",
+        "esri/widgets/Daylight",
+        "esri/widgets/Legend",
+         "esri/layers/GraphicsLayer",
+        "esri/widgets/Sketch/SketchViewModel",
+        "esri/widgets/Slider",
+        "esri/geometry/geometryEngine",
+        "esri/Graphic",
+        "esri/core/promiseUtils"
+      ], (Map, SceneLayer, SceneView, Expand, Weather, Daylight, Legend, GraphicsLayer, SketchViewModel, Slider, geometryEngine, Graphic, promiseUtils) => {
+        
+        const map = new Map({
+          basemap: "topo-vector",
+          ground: "world-elevation"
+        });
+
+        const view = new SceneView({
+          container: "viewDiv",
+          map: map,
+          camera: {
+            position: [25.289652, 54.6907157, 2183],
+            tilt: 30,
+            heading: 0
+          },
+          qualityProfile: "high",
+
+          environment: {
+            weather: {
+              type: "cloudy", // autocasts as new CloudyWeather({ cloudCover: 0.3 })
+              cloudCover: 0.3
+            },
+            atmosphere: {
+              quality: "high"
+            },
+            lighting: {
+              waterReflectionEnabled: true,
+              ambientOcclusionEnabled: true
+            }
+          }
+        });
+        
+        
+        const sceneLayer = new SceneLayer({
+          url: "https://services1.arcgis.com/usA3lHW20rGU6glp/ArcGIS/rest/services/VP_SDE1_VP3D_STATINIAI_3D/SceneServer/layers/0",
+          title: "Pastatu aukstis"
+        });
+        map.add(sceneLayer);
+
+        const symbol = {
+          type: "mesh-3d", // autocasts as new MeshSymbol3D()
+          symbolLayers: [
+            {
+              type: "fill", // autocasts as new FillSymbol3DLayer()
+              material: {
+                color: [255, 255, 255],
+                transparency: 0
+              }
+            }
+          ]
+        };
+
+        sceneLayer.renderer = {
+          type: "simple", // autocasts as new SimpleRenderer()
+          symbol: symbol,
+          label: "Pastatu aukstis",
+          visualVariables: [
+            {
+              type: "color",
+              field: "BRECHighes",
+              normalizationField: "",
+              legendOptions: {
+                title: "Pastato stogo viršaus altitudė"
+              },
+              stops: [
+                {
+                  value: 95,
+                  color: "#a1caf1",
+                  label: "<95m"
+                },
+                {
+                  value: 170,
+                  color: "#ff9899",
+                  label: "170m"
+                },
+                {
+                  value: 250,
+                  color: "#b0bf1a",
+                  label: ">250m"
+                }
+              ]
+            }
+          ]
+        };
+        
+        const legend = new Legend({
+          view: view
+        });
+      
+        view.ui.add(
+          new Expand({ content: legend, view: view, expanded: true }),
+          "bottom-right"
+        );
+
+        const weatherExpand = new Expand({
+          view: view,
+          content: new Weather({
+            view: view
+          }),
+          group: "top-right",
+          expanded: true
+        });
+
+        const daylightExpand = new Expand({
+          view: view,
+          content: new Daylight({
+            view: view
+          }),
+          group: "top-right"
+        });
+        view.ui.add([weatherExpand, daylightExpand], "top-right");
+        
+        window.view = view;
+        const sketchLayer = new GraphicsLayer();
+        const bufferLayer = new GraphicsLayer();
+        view.map.addMany([bufferLayer, sketchLayer]);
+        
+        
+        let sceneLayerView1 = null;
+        let bufferSize = 0;
+        sceneLayer.outFields = ["Medziaga", "STATMETAI"];
+        
+        view.whenLayerView(sceneLayer).then((layerView) => {
+            sceneLayerView1 = layerView;
+            queryDiv.style.display = "block";
+          });
+        
+        
+        view.ui.add([queryDiv], "bottom-left");
+        view.ui.add([resultDiv], "top-right");
+        
+        let sketchGeometry = null;
+        const sketchViewModel = new SketchViewModel({
+          layer: sketchLayer,
+          defaultUpdateOptions: {
+            tool: "reshape",
+            toggleToolOnClick: false
+          },
+          view: view,
+          defaultCreateOptions: { hasZ: false }
+        });
+
+        sketchViewModel.on("create", (event) => {
+          if (event.state === "complete") {
+            sketchGeometry = event.graphic.geometry;
+            runQuery();
+          }
+        });
+
+        sketchViewModel.on("update", (event) => {
+          if (event.state === "complete") {
+            sketchGeometry = event.graphics[0].geometry;
+            runQuery();
+          }
+        });
+        
+        const pointBtn = document.getElementById("point-geometry-button");
+        const lineBtn = document.getElementById("line-geometry-button");
+        const polygonBtn = document.getElementById("polygon-geometry-button");
+        pointBtn.addEventListener("click", geometryButtonsClickHandler);
+        lineBtn.addEventListener("click", geometryButtonsClickHandler);
+        polygonBtn.addEventListener("click", geometryButtonsClickHandler);
+        function geometryButtonsClickHandler(event) {
+          const geometryType = event.target.value;
+          clearGeometry();
+          sketchViewModel.create(geometryType);
+        }
+
+        const bufferNumSlider = new Slider({
+          container: "bufferNum",
+          min: 0,
+          max: 500,
+          steps: 1,
+          visibleElements: {
+            labels: true
+          },
+          precision: 0,
+          labelFormatFunction: (value, type) => {
+            return `${value.toString()}m`;
+          },
+          values: [0]
+        });
+        // get user entered values for buffer
+        bufferNumSlider.on(
+          ["thumb-change", "thumb-drag"],
+          bufferVariablesChanged
+        );
+        function bufferVariablesChanged(event) {
+          bufferSize = event.value;
+          runQuery();
+        }
+        // Clear the geometry and set the default renderer
+        const clearGeometryBtn = document.getElementById("clearGeometry");
+        clearGeometryBtn.addEventListener("click", clearGeometry);
+
+        // Clear the geometry and set the default renderer
+        function clearGeometry() {
+          sketchGeometry = null;
+          sketchViewModel.cancel();
+          sketchLayer.removeAll();
+          bufferLayer.removeAll();
+          clearHighlighting();
+          clearCharts();
+          resultDiv.style.display = "none";
+        }
+
+        // set the geometry query on the visible SceneLayerView
+        const debouncedRunQuery = promiseUtils.debounce(() => {
+          if (!sketchGeometry) {
+            return;
+          }
+
+          resultDiv.style.display = "block";
+          updateBufferGraphic(bufferSize);
+          return promiseUtils.eachAlways([
+            queryStatistics(),
+            updateSceneLayer()
+          ]);
+        });
+
+        function runQuery() {
+          debouncedRunQuery().catch((error) => {
+            if (error.name === "AbortError") {
+              return;
+            }
+
+            console.error(error);
+          });
+        }
+
+        // Set the renderer with objectIds
+        let highlightHandle = null;
+        function clearHighlighting() {
+          if (highlightHandle) {
+            highlightHandle.remove();
+            highlightHandle = null;
+          }
+        }
+
+        function highlightBuildings(objectIds) {
+          // Remove any previous highlighting
+          clearHighlighting();
+          const objectIdField = sceneLayer.objectIdField;
+          document.getElementById("count").innerHTML = objectIds.length;
+
+          highlightHandle = sceneLayerView1.highlight(objectIds);
+        }
+
+        // update the graphic with buffer
+        function updateBufferGraphic(buffer) {
+          // add a polygon graphic for the buffer
+          if (buffer > 0) {
+            const bufferGeometry = geometryEngine.geodesicBuffer(
+              sketchGeometry,
+              buffer,
+              "meters"
+            );
+            if (bufferLayer.graphics.length === 0) {
+              bufferLayer.add(
+                new Graphic({
+                  geometry: bufferGeometry,
+                  symbol: sketchViewModel.polygonSymbol
+                })
+              );
+            } else {
+              bufferLayer.graphics.getItemAt(0).geometry = bufferGeometry;
+            }
+          } else {
+            bufferLayer.removeAll();
+          }
+        }
+
+        function updateSceneLayer() {
+          const query = sceneLayerView1.createQuery();
+          query.geometry = sketchGeometry;
+          query.distance = bufferSize;
+          return sceneLayerView1.queryObjectIds(query).then(highlightBuildings);
+        }
+
+        let yearChart = null;
+        let materialChart = null;
+        
+        
+        function queryStatistics() {
+          const statDefinitions = [
+            {
+              onStatisticField:
+                "CASE WHEN Medziaga = 'm?r' THEN 1 ELSE 0 END",
+              outStatisticFieldName: "murinis",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN Medziaga = 'med' THEN 1 ELSE 0 END",
+              outStatisticFieldName: "medinis",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN Medziaga = 'met' THEN 1 ELSE 0 END",
+              outStatisticFieldName: "metalinis",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN Medziaga IN ('m?r', 'med', 'met') THEN 0 ELSE 1 END",
+              outStatisticFieldName: "kita_medziaga",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '1600' AND STATMETAI <= '1899') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_1600",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '1900' AND STATMETAI <= '1924') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_1900",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '1925' AND STATMETAI <= '1949') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_1925",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '1950' AND STATMETAI <= '1974') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_1950",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '1975' AND STATMETAI <= '1999') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_1975",
+              statisticType: "sum"
+            },
+            {
+              onStatisticField:
+                "CASE WHEN (STATMETAI >= '2000' AND STATMETAI <= '2015') THEN 1 ELSE 0 END",
+              outStatisticFieldName: "m_2000",
+              statisticType: "sum"
+            }
+          ];
+          const query = sceneLayerView1.createQuery();
+          query.geometry = sketchGeometry;
+          query.distance = bufferSize;
+          query.outStatistics = statDefinitions;
+
+          return sceneLayerView1.queryFeatures(query).then((result) => {
+            const allStats = result.features[0].attributes;
+            updateChart(materialChart, [
+              allStats.murinis,
+              allStats.medinis,
+              allStats.metalinis,
+              allStats.kita_medziaga,
+              allStats.material_other
+            ]);
+            updateChart(yearChart, [
+              allStats.m_1600,
+              allStats.m_1900,
+              allStats.m_1925,
+              allStats.m_1950,
+              allStats.m_1975,
+              allStats.m_2000
+            ]);
+          }, console.error);
+        }
+        function updateChart(chart, dataValues) {
+          chart.data.datasets[0].data = dataValues;
+          chart.update();
+        }
+
+        function createYearChart() {
+          const yearCanvas = document.getElementById("year-chart");
+          yearChart = new Chart(yearCanvas.getContext("2d"), {
+            type: "horizontalBar",
+            data: {
+              labels: [
+                "1600-1899",
+                "1900-1924",
+                "1925-1949",
+                "1950-1974",
+                "1975-1999",
+                "2000-2015"
+              ],
+              datasets: [
+                {
+                  label: "Statybos metai",
+                  backgroundColor: "#129dcf",
+                  stack: "Stack 0",
+                  data: [0, 0, 0, 0, 0, 0]
+                }
+              ]
+            },
+            options: {
+              responsive: false,
+              legend: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: "Build year"
+              },
+              scales: {
+                xAxes: [
+                  {
+                    stacked: true,
+                    ticks: {
+                      beginAtZero: true,
+                      precision: 0
+                    }
+                  }
+                ],
+                yAxes: [
+                  {
+                    stacked: true
+                  }
+                ]
+              }
+            }
+          });
+        }
+        
+        function createMaterialChart() {
+          const materialCanvas = document.getElementById("material-chart");
+          materialChart = new Chart(materialCanvas.getContext("2d"), {
+            type: "doughnut",
+            data: {
+              labels: ["Mūrinis", "Medinis", "Metalinis", "Kita"],
+              datasets: [
+                {
+                  backgroundColor: [
+                    "#FD7F6F",
+                    "#7EB0D5",
+                    "#B2E061",
+                    "#BD7EBE"
+                  ],
+                  borderWidth: 0,
+                  data: [0, 0, 0, 0]
+                }
+              ]
+            },
+            options: {
+              responsive: false,
+              cutoutPercentage: 35,
+              legend: {
+                position: "bottom"
+              },
+              title: {
+                display: true,
+                text: "Statybos medžiagos"
+              }
+            }
+          });
+        }
+        
+         function clearCharts() {
+          updateChart(materialChart, [0, 0, 0, 0, 0]);
+          updateChart(yearChart, [0, 0, 0, 0, 0, 0]);
+          document.getElementById("count").innerHTML = 0;
+        }
+
+        createYearChart();
+        createMaterialChart();
+        
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+    <div id="selection"></div>
+    <div id="queryDiv" class="esri-widget">
+      <b>Query by geometry</b><br />
+      <br />Draw a geometry to query by:
+      <div class="geometry-options">
+        <button
+          class="esri-widget--button esri-icon-map-pin geometry-button"
+          id="point-geometry-button"
+          value="point"
+          title="Query by point"
+        ></button>
+        <button
+          class="esri-widget--button esri-icon-polyline geometry-button"
+          id="line-geometry-button"
+          value="polyline"
+          title="Query by line"
+        ></button>
+        <button
+          class="esri-widget--button esri-icon-polygon geometry-button"
+          id="polygon-geometry-button"
+          value="polygon"
+          title="Query by polygon"
+        ></button>
+      </div>
+      <br />
+      <div class="tooltip">
+        <label for="bufferNum">Set a geometry buffer size:</label>
+        <div id="bufferNum"></div>
+      </div>
+      <br />
+      <button class="esri-button" id="clearGeometry" type="button">
+        Clear
+      </button>
+    </div>
+
+    <div id="resultDiv" class="esri-widget">
+      <div class="count">
+        Selected Buildings:
+        <div class="count" id="count">0</div>
+      </div>
+      <div class="charts">
+        <div>
+          <canvas id="year-chart" height="250" width="260" />
+        </div>
+        <div>
+          <canvas id="material-chart" width="250" height="300" />
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

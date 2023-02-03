@@ -1,0 +1,554 @@
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>
+      ArcGIS Maps SDK for JavaScript 4.25
+    </title>
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+      }
+
+      .viewDivBase {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 49.9%;
+      }
+
+      #viewDiv2d {
+        float: left;
+      }
+
+      #viewDiv3d {
+        float: right;
+      }
+
+      #paneDiv {
+        position: fixed;
+        bottom: 0;
+        right: 1px;
+        padding: 12px;
+        width: 120px;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: white;
+      }
+
+
+      #buttonsDiv {
+        position: absolute;
+        top: 330px;
+        right: 1px;
+        padding: 12px;
+        background-color: rgba(200, 200, 200, 0.5);
+        border: 1px solid black;
+      }
+
+      #indicatorSpan {
+        display: inline-block;
+        vertical-align: middle;
+        width: 30px;
+        height: 30px;
+        background-color: rgba(100, 100, 100, 0.8);
+        border: 2px solid #ccc;
+      }
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.25/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.25/"></script>
+
+    <script>
+      require([
+        "esri/Map",
+        "esri/views/SceneView",
+        "esri/views/MapView",
+        "esri/widgets/Locate",
+        "esri/layers/FeatureLayer",
+        "esri/renderers/Renderer",
+        "esri/layers/TileLayer",
+        "esri/layers/ElevationLayer",
+        "esri/geometry/geometryEngine",
+        "esri/layers/GraphicsLayer",
+        "esri/Graphic",
+        "esri/widgets/Legend",
+        "esri/widgets/Daylight",
+        "esri/widgets/Expand"
+      ], (
+        Map,
+        SceneView,
+        MapView,
+        Locate,
+        FeatureLayer,
+        Renderer,
+        TileLayer,
+        ElevationLayer,
+        geometryEngine,
+        GraphicsLayer,
+        Graphic,
+        Legend,
+        Daylight,
+        Expand
+      ) => {
+        const col = [
+          "#a6d608",
+          "#5929f7",
+          "#3cccb4",
+          "#f260a1",
+          "#8f6efa",
+          "#79a300",
+          "#ffdf3c",
+          "#6699cc",
+          "#febaad",
+          "#a4dded"
+        ];
+
+        const commonProperties = {
+          type: "simple-marker",
+          style: "circle",
+          color: col,
+          size: "8px", // pixels
+          outline: {
+            // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1 // points
+          }
+        };
+
+        // etapo simbolis
+        const etapas1 = {
+          ...commonProperties,
+          color: col[0]
+        };
+
+        const etapas2 = {
+          ...commonProperties,
+          color: col[1]
+        };
+
+        const etapas3 = {
+          ...commonProperties,
+          color: col[2]
+        };
+
+        const etapas4 = {
+          ...commonProperties,
+          color: col[3]
+        };
+
+        const etapas5 = {
+          ...commonProperties,
+          color: col[4]
+        };
+
+        const etapas6 = {
+          ...commonProperties,
+          color: col[5]
+        };
+
+        const etapas7 = {
+          ...commonProperties,
+          color: col[6]
+        };
+
+        const etapas8 = {
+          ...commonProperties,
+          color: col[7]
+        };
+
+        const etapas9 = {
+          ...commonProperties,
+          color: col[8]
+        };
+
+        const etapas10 = {
+          ...commonProperties,
+          color: col[9]
+        };
+
+        const takasRend = {
+          type: "unique-value", // autocasts as new UniqueValueRenderer()
+          legendOptions: {
+            title: "Tako etapai"
+          },
+          defaultSymbol: etapas9,
+          field: "etapas_",
+
+          uniqueValueInfos: [
+            {
+              value: "1",
+              symbol: etapas1,
+              label: "1 Etapas"
+            },
+            {
+              value: "2",
+              symbol: etapas2,
+              label: "2 Etapas"
+            },
+            {
+              value: "3",
+              symbol: etapas3,
+              label: "3 Etapas"
+            },
+            {
+              value: "4",
+              symbol: etapas4,
+              label: "4 Etapas"
+            },
+            {
+              value: "5",
+              symbol: etapas5,
+              label: "5 Etapas"
+            },
+            {
+              value: "6",
+              symbol: etapas6,
+              label: "6 Etapas"
+            },
+            {
+              value: "7",
+              symbol: etapas7,
+              label: "7 Etapas"
+            },
+            {
+              value: "8",
+              symbol: etapas8,
+              label: "8 Etapas"
+            },
+            {
+              value: "9",
+              symbol: etapas9,
+              label: "9 Etapas"
+            },
+            {
+              value: "10",
+              symbol: etapas10,
+              label: "10 Etapas"
+            }
+          ]
+        };
+
+        const takasL = new FeatureLayer({
+          url: "https://services1.arcgis.com/usA3lHW20rGU6glp/arcgis/rest/services/Trail_trasa_(2022)_view/FeatureServer/0"
+        });
+
+        const takoZenklinimasL = new FeatureLayer({
+          url: "https://services1.arcgis.com/usA3lHW20rGU6glp/arcgis/rest/services/Pagalbinis_trasos_%C5%BEenklinimas_(%C5%BEem%C4%97lapiui)_view/FeatureServer/0",
+          renderer: takasRend,
+          title: "Takas aplink Vilnių",
+          minScale: 0,
+          maxScale: 0
+        });
+
+        const map = new Map({
+          layers: [takasL, takoZenklinimasL],
+          basemap: "topo-vector",
+          ground: "world-elevation"
+        });
+
+        const LietuvosReljefas = new ElevationLayer({
+          url: "https://maps.lt/arcgis/rest/services/elevation/SEZP_10m_WM_dm/ImageServer",
+          visible: false
+        });
+
+        map.ground.when(() => {
+          map.ground.layers.add(LietuvosReljefas);
+        });
+
+        const viewOpt = {
+          map: map,
+          scale: 50000,
+          center: [25.279652, 54.687157], // Vilnius longitude, latitude
+          camera: {
+            position: [25.329652, 54.507157, 5183],
+            tilt: 80
+          },
+          environment: {
+            atmosphere: {
+              // creates a realistic view of the atmosphere
+              quality: "high"
+            },
+            lighting: {
+              // autocasts as new SunLighting()
+              type: "sun",
+              date: new Date("January 24, 2023 14::55 UTC"),
+
+              directShadowsEnabled: true
+            }
+          }
+        };
+
+        const view3d = new SceneView(viewOpt);
+        view3d.container = "viewDiv3d";
+
+        const view2d = new MapView(viewOpt);
+        view2d.container = "viewDiv2d";
+
+        const legend = new Legend({
+          view: view2d
+        });
+      
+        view2d.ui.add(
+          new Expand({ content: legend, view: view2d, expanded: true }),
+          "bottom-left"
+        );
+
+        const locate = new Locate({
+          view: view2d,
+          useHeadingEnabled: false,
+          goToOverride: function (view, options) {
+            options.target.scale = 1500;
+            return view2d.goTo(options.target);
+          }
+        });
+        view2d.ui.add(locate, "top-left");
+
+        const daylight = new Daylight({
+          view: view3d,
+          // plays the animation twice as fast than the default one
+          playSpeedMultiplier: 2,
+          // disable the timezone selection button
+          visibleElements: {
+            timezone: false
+          }
+        });
+
+        // Add widget inside an Expand widget to be able to hide it on devices with small screens
+        view3d.ui.add(
+          new Expand({ content: daylight, view: view3d, expanded: true }),
+          "top-right"
+        );
+       
+        document
+          .getElementById("reljefasInput")
+          .addEventListener("change", () => {
+            // pazymejus checkbox rodomas reljefas
+            LietuvosReljefas.visible =
+              document.getElementById("reljefasInput").checked;
+          });
+
+        const bufferLayer = new GraphicsLayer();
+        const pointLayer = new GraphicsLayer();
+        map.addMany([bufferLayer, pointLayer]);
+
+        //aprasomas bufferio simbolis(apskritimas)
+        const polySym = {
+          type: "simple-fill",
+          color: [57, 250, 20, 0.5],
+          outline: {
+            color: [0, 0, 0, 0.5],
+            width: 2
+          }
+        };
+
+        //aprasomas bufferio centras
+        const pointSym = {
+          type: "simple-marker",
+          color: [0, 255, 0],
+          outline: {
+            color: [255, 255, 255],
+            width: 1
+          },
+          size: 3
+        };
+
+        let bufferVeikia = false;
+
+        function mygtukoSpaudimas(event) {
+          const keyInput = event.key;
+          bufferVeikia = keyInput === "b" && !bufferVeikia;
+          if (bufferVeikia) {
+            document.getElementById("mode").innerHTML = "navigation";
+          } else {
+            document.getElementById("mode").innerHTML = "buffering";
+          }
+        }
+
+        view2d.on("key-down", mygtukoSpaudimas);
+        view3d.on("key-down", mygtukoSpaudimas);
+
+        view2d.on("pointer-move", (event) => {
+          if (bufferVeikia) {
+            createBuffer(event, view2d);
+          }
+        });
+
+        view3d.on("pointer-move", (event) => {
+          if (bufferVeikia) {
+            createBuffer(event, view3d);
+          }
+        });
+
+        view2d.on("click", (event) => {
+          bufferPoint(event.mapPoint);
+        });
+
+        view3d.on("click", (event) => {
+          bufferPoint(event.mapPoint);
+        });
+
+        function createBuffer(event, view) {
+          event.stopPropagation();
+
+          const point = view.toMap({
+            x: event.x,
+            y: event.y
+          });
+
+          if (point) {
+            bufferPoint(point);
+          }
+        }
+
+        function bufferPoint(point) {
+          if (!bufferVeikia) {
+            console.log(
+              "Buffering neijungtas. Paspauskite b mygtuka noredami piesti bufferi."
+            );
+            return;
+          }
+
+          clearGraphics();
+
+          point.hasZ = false;
+          point.z = undefined;
+
+          pointLayer.add(
+            new Graphic({
+              geometry: point,
+              symbol: pointSym
+            })
+          );
+
+          const buffer = geometryEngine.geodesicBuffer(
+            point,
+            1, // bus piesiamas 1km spindulio bufferis
+            "kilometers"
+          );
+
+          bufferLayer.add(
+            new Graphic({
+              geometry: buffer,
+              symbol: polySym
+            })
+          );
+        }
+        //Istrinama pries tai nupiesta grafika
+        function clearGraphics() {
+          pointLayer.removeAll();
+          bufferLayer.removeAll();
+        }
+
+        // Register events to control
+        const rotateAntiClockwiseSpan = document.getElementById(
+          "rotateAntiClockwiseSpan"
+        );
+        const rotateClockwiseSpan = document.getElementById(
+          "rotateClockwiseSpan"
+        );
+        const indicatorSpan = document.getElementById("indicatorSpan");
+        rotateClockwiseSpan.addEventListener("click", () => {
+          rotateView(-1);
+        });
+        rotateAntiClockwiseSpan.addEventListener("click", () => {
+          rotateView(1);
+        });
+        indicatorSpan.addEventListener("click", tiltView);
+
+        // Watch the change on view.camera
+        view3d.watch("camera", updateIndicator);
+
+        // Create the event's callback functions
+        function rotateView(direction) {
+          let heading = view3d.camera.heading;
+
+          // Set the heading of the view to the closest multiple of 90 degrees,
+          // depending on the direction of rotation
+          if (direction > 0) {
+            heading = Math.floor((heading + 1e-3) / 90) * 90 + 90;
+          } else {
+            heading = Math.ceil((heading - 1e-3) / 90) * 90 - 90;
+          }
+
+          view3d
+            .goTo({
+              heading: heading
+            })
+            .catch((error) => {
+              if (error.name != "AbortError") {
+                console.error(error);
+              }
+            });
+        }
+
+        function tiltView() {
+          // Get the camera tilt and add a small number for numerical inaccuracies
+          let tilt = view3d.camera.tilt + 1e-3;
+
+          // Switch between 3 levels of tilt
+          if (tilt >= 80) {
+            tilt = 0;
+          } else if (tilt >= 40) {
+            tilt = 80;
+          } else {
+            tilt = 40;
+          }
+
+          view3d
+            .goTo({
+              tilt: tilt
+            })
+            .catch((error) => {
+              if (error.name != "AbortError") {
+                console.error(error);
+              }
+            });
+        }
+
+        function updateIndicator(camera) {
+          let tilt = camera.tilt;
+          let heading = camera.heading;
+
+          // Update the indicator to reflect the current tilt/heading using
+          // css transforms.
+
+          const transform = `rotateX(${
+            0.8 * tilt
+          }deg) rotateY(0) rotateZ(${-heading}deg)`;
+          indicatorSpan.style["transform"] = transform;
+          indicatorSpan.style["-webkit-transform"] = transform; // Solution for Safari
+        }
+      });
+    </script>
+  </head>
+
+  <body>
+    <div class="viewDivBase" id="viewDiv2d"></div>
+    <div class="viewDivBase" id="viewDiv3d">
+      <div id="buttonsDiv">
+        <button id="rotateAntiClockwiseSpan" title="Rotate 90°">↻</button>
+        <button id="indicatorSpan"></button>
+        <button id="rotateClockwiseSpan" title="Rotate 90°">↺</button>
+      </div>
+      <div id="paneDiv" class="esri-widget">
+        <input id="reljefasInput" type="checkbox" /> Rodyti reljefa (Lietuviskus
+        duomenis)
+        <label class="chkLabel"
+          >Spauskite <strong>b mygtuka</strong> norint ijungti
+          <strong> <span id="mode">buffering funkcija</span>.</strong> Pieskite
+          buffer su peles paspaudimu, pasirinkus vieta spauskite bet kuri
+          klaviaturos mygtuka.
+        </label>
+      </div>
+    </div>
+  </body>
+</html>
